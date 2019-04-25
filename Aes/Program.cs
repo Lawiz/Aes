@@ -1,11 +1,11 @@
-﻿using System;
-using System.Collections.Generic;
+﻿//All thanks to the creator https://vk.com/id274588823 :)
+//Made with https://www.youtube.com/watch?v=CxU4ROAYGzs and https://en.wikipedia.org/wiki/Block_cipher_mode_of_operation help
+using System;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
-using System.Threading.Tasks;
 
 namespace Aes
 {
@@ -62,6 +62,7 @@ namespace Aes
         }
     }
 
+    // not thread safe
     public class AES
     {
         byte[,] Sbox = new byte[,] {
@@ -200,6 +201,11 @@ namespace Aes
             AddRoundKey(0);
 
             return GetFlattenedState();
+        }
+
+        public int GetRequiredInputSize()
+        {
+            return R * Nb;
         }
 
         private void CopyInput(byte[] input)
@@ -418,17 +424,233 @@ namespace Aes
         }
     }
 
+    public abstract class AESBASE
+    {
+        protected readonly AES AES;
+
+        public AESBASE()
+        {
+            AES = new AES();
+        }
+
+        public byte[] Encrypt(byte[] input, string key)
+        {
+            var blocks = input.Split(AES.GetRequiredInputSize());
+            AddLastBlockLengthBlock(ref blocks);
+            var encrypted = Encrypt(blocks, GetMD5Hash(key));
+            return encrypted.SelectMany(x => x).ToArray();
+        }
+
+        public byte[] Decrypt(byte[] input, string key)
+        {
+            var blocks = input.Split(AES.GetRequiredInputSize());
+            var decrypted = Decrypt(blocks, GetMD5Hash(key));
+            RemoveLastBlockLengthBlock(ref decrypted);
+            return decrypted.SelectMany(x => x).ToArray();
+        }
+
+        protected abstract byte[][] Encrypt(byte[][] blocks, byte[] key);
+
+        protected abstract byte[][] Decrypt(byte[][] blocks, byte[] key);
+
+        private void AddLastBlockLengthBlock(ref byte[][] blocks)
+        {
+            var blockSize = AES.GetRequiredInputSize();
+            Array.Resize(ref blocks, blocks.Length + 1);
+            blocks[blocks.Length - 1] = new byte[blockSize];
+            blocks[blocks.Length - 1][0] = (byte)blocks[blocks.Length - 2].Length;
+            Array.Resize(ref blocks[blocks.Length - 2], blockSize);
+        }
+
+        private void RemoveLastBlockLengthBlock(ref byte[][] blocks)
+        {
+            var lastBlockLength = blocks[blocks.Length - 1][0];
+            Array.Resize(ref blocks, blocks.Length - 1);
+            Array.Resize(ref blocks[blocks.Length - 1], lastBlockLength);
+        }
+
+        private byte[] GetMD5Hash(string input)
+        {
+            using (MD5 md5 = MD5.Create())
+            {
+                byte[] inputBytes = Encoding.UTF8.GetBytes(input);
+                return md5.ComputeHash(inputBytes);
+            }
+        }
+    }
+
+    public class ECBAES : AESBASE
+    {
+        protected override byte[][] Decrypt(byte[][] blocks, byte[] key)
+        {
+            for (int i = 0; i < blocks.Length; i++)
+            {
+                blocks[i] = AES.Decrypt(blocks[i], key);
+            }
+            return blocks;
+        }
+
+        protected override byte[][] Encrypt(byte[][] blocks, byte[] key)
+        {
+            for (int i = 0; i < blocks.Length; i++)
+            {
+                blocks[i] = AES.Encrypt(blocks[i], key);
+            }
+            return blocks;
+        }
+    }
+
+    public class CBCAES : AESBASE
+    {
+        byte[] initializationVector;
+
+        public CBCAES()
+        {
+            initializationVector = new byte[] {
+                1, 3, 6, 1, 2, 16, 91, 243, 234, 23, 161, 191, 82, 68, 129, 210
+            };
+        }
+
+        protected override byte[][] Encrypt(byte[][] blocks, byte[] key)
+        {
+            var previousBlock = GetInitializationBlock();
+            for (int i = 0; i < blocks.Length; i++)
+            {
+                blocks[i] = AES.Encrypt(Xor(previousBlock, blocks[i]), key);
+                previousBlock = blocks[i];
+            }
+            return blocks;
+        }
+
+        protected override byte[][] Decrypt(byte[][] blocks, byte[] key)
+        {
+            var previousBlock = GetInitializationBlock();
+            for (int i = 0; i < blocks.Length; i++)
+            {
+                var currBlock = blocks[i];
+                blocks[i] = Xor(AES.Decrypt(blocks[i], key), previousBlock);
+                previousBlock = currBlock;
+            }
+            return blocks;
+        }
+
+        protected byte[] Xor(byte[] bytes1, byte[] bytes2)
+        {
+            var ret = new byte[bytes1.Length];
+            for (int i = 0; i < ret.Length; i++)
+            {
+                ret[i] = (byte)(bytes1[i] ^ bytes2[i]);
+            }
+            return ret;
+        }
+
+        protected byte[] GetInitializationBlock()
+        {
+            var ret = new byte[initializationVector.Length]; 
+            Buffer.BlockCopy(initializationVector, 0, ret, 0, ret.Length);
+            return ret;
+        }
+    }
+
+    public class PCBCAES : CBCAES
+    {
+        protected override byte[][] Encrypt(byte[][] blocks, byte[] key)
+        {
+            var previousBlock = GetInitializationBlock();
+            for (int i = 0; i < blocks.Length; i++)
+            {
+                var currPlain = blocks[i];
+                blocks[i] = AES.Encrypt(Xor(previousBlock, blocks[i]), key);
+                previousBlock = Xor(blocks[i], currPlain);
+            }
+            return blocks;
+        }
+
+        protected override byte[][] Decrypt(byte[][] blocks, byte[] key)
+        {
+            var previousBlock = GetInitializationBlock();
+            for (int i = 0; i < blocks.Length; i++)
+            {
+                var currCiph = blocks[i];
+                blocks[i] = Xor(AES.Decrypt(blocks[i], key), previousBlock);
+                previousBlock = Xor(blocks[i], currCiph);
+            }
+            return blocks;
+        }
+    }
+
+    public class CFBAES : CBCAES
+    {
+        protected override byte[][] Encrypt(byte[][] blocks, byte[] key)
+        {
+            var previousBlock = GetInitializationBlock();
+            for (int i = 0; i < blocks.Length; i++)
+            {
+                blocks[i] = Xor(AES.Encrypt(previousBlock, key), blocks[i]);
+                previousBlock = blocks[i];
+            }
+            return blocks;
+        }
+
+        protected override byte[][] Decrypt(byte[][] blocks, byte[] key)
+        {
+            var previousBlock = GetInitializationBlock();
+            for (int i = 0; i < blocks.Length; i++)
+            {
+                var currCiph = blocks[i];
+                blocks[i] = Xor(AES.Encrypt(previousBlock, key), blocks[i]);
+                previousBlock = currCiph;
+            }
+            return blocks;
+        }
+    }
+
+    public class CTRAES : CBCAES
+    {
+        protected override byte[][] Encrypt(byte[][] blocks, byte[] key)
+        {
+            var initializationVector = GetInitializationBlock();
+            var number = new byte[] { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15 };
+            for (int i = 0; i < blocks.Length; i++)
+            {
+                blocks[i] = Xor(AES.Encrypt(Xor(initializationVector, number), key), blocks[i]);
+            }
+            return blocks;
+        }
+
+        protected override byte[][] Decrypt(byte[][] blocks, byte[] key)
+        {
+            var initializationVector = GetInitializationBlock();
+            var number = new byte[] { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15 };
+            for (int i = 0; i < blocks.Length; i++)
+            {
+                blocks[i] = Xor(AES.Encrypt(Xor(initializationVector, number), key), blocks[i]);
+            }
+            return blocks;
+        }
+
+        private byte[] GetNextNumber(byte[] number)
+        {
+            var ret = new byte[number.Length];
+            for (int i = 0; i < ret.Length; i++)
+            {
+                ret[i] = (byte)((number[i] * 7129 + 5) % 256);
+            }
+            return ret;
+        }
+    }
+
     public static class ArrayExtensions
     {
         public static T[][] Split<T>(this T[] array, int blockSize)
         {
-            var blocksCount = array.Length / blockSize;
+            var blocksCount = array.Length / blockSize + (array.Length % blockSize == 0 ? 0 : 1);
             var result = new T[blocksCount][];
             for (int i = 0; i < blocksCount; i++)
             {
-                result[i] = new T[blockSize];
+                result[i] = new T[Math.Min(array.Length - i * blockSize, blockSize)];
                 var blockBeginIndex = i * blockSize;
-                for (int j = 0; j < blockSize; j++)
+                for (int j = 0; j < result[i].Length; j++)
                 {
                     result[i][j] = array[blockBeginIndex + j];
                 }
@@ -441,71 +663,42 @@ namespace Aes
     {
         static void Main(string[] args)
         {
-            //var filePath = @"D:\AESTEST\funniest_home_videos_part_10.mp4";
-            //var fileEncryptedPath = @"D:\AESTEST\funniest_home_videos_part_10(Encrypted).mp4";
-            //var fileDecryptedPath = @"D:\AESTEST\funniest_home_videos_part_10(Decrypted).mp4";
-
             var filePath = @"D:\AESTEST\New Text Document.txt";
-            var fileEncryptedPath = @"D:\AESTEST\New Text Document(Encrypted).txt";
-            var fileDecryptedPath = @"D:\AESTEST\New Text Document(Decrypted).txt";
 
-            Console.WriteLine("Ecnryption started");
-            var T1 = new Stopwatch();
-            T1.Start();
-            EncryptFile(filePath, fileEncryptedPath, "123456");
-            T1.Stop();
-            Console.WriteLine("Elapsed ecnrypted: " + T1.ElapsedMilliseconds / 1000.0);
-
-            Console.WriteLine("Decryption started");
-            var T2 = new Stopwatch();
-            T2.Start();
-            DecryptFile(fileEncryptedPath, fileDecryptedPath, "123456");
-            T2.Stop();
-            Console.WriteLine("Elapsed decrypted: " + T1.ElapsedMilliseconds / 1000.0);
-        }
-
-        private static void EncryptFile(string filePath, string fileOutputPath, string password)
-        {
-            var aes = new AES();
-            var cipherKey = GetMD5Hash(password);
-            var bytes = File.ReadAllBytes(filePath);
-            var blocks = bytes.Split(16);
-            for (int i = 0; i < blocks.Length; i++)
+            var aesCiphers = new AESBASE[] {
+                new ECBAES(), new CBCAES(), new PCBCAES(), new CFBAES(), new CTRAES()
+            };
+            foreach (var aesCipher in aesCiphers)
             {
-                blocks[i] = aes.Decrypt(blocks[i], cipherKey);
-            }
-            var decrypted = blocks.SelectMany(x => x).ToArray();
-            File.WriteAllBytes(fileOutputPath, decrypted);
-        }
-
-        private static void DecryptFile(string filePath, string fileOutputPath, string password)
-        {
-            var aes = new AES();
-            var cipherKey = GetMD5Hash(password);
-            var encrypted = File.ReadAllBytes(filePath);
-            var blocks = encrypted.Split(16);
-            for (int i = 0; i < blocks.Length; i++)
-            {
-                blocks[i] = aes.Decrypt(blocks[i], cipherKey);
-            }
-            var decrypted = blocks.SelectMany(x => x).ToArray();
-            File.WriteAllBytes(fileOutputPath, decrypted);
-        }
-
-        public static byte[] GetMD5Hash(string input)
-        {
-            using (MD5 md5 = MD5.Create())
-            {
-                byte[] inputBytes = Encoding.UTF8.GetBytes(input);
-                return md5.ComputeHash(inputBytes);
+                DoEncryptDecrypt(
+                    aesCipher,
+                    filePath,
+                    GetAesCipherPath(filePath, aesCipher.GetType()),
+                    GetAesCipherPath(filePath, aesCipher.GetType(), false),
+                    "123456"
+                );
             }
         }
 
-        private static void CheckEncrypted(byte[] encrypted)
+        private static string GetAesCipherPath(string path, Type aesType, bool isEncrypted = true)
         {
-            var ans = GetBytesString(encrypted);
-            Console.WriteLine(ans);
-            Console.WriteLine(ans == "39 25 84 1d 2 dc 9 fb dc 11 85 97 19 6a b 32 ");
+            var encryptedSuffix = isEncrypted ? "_Encrypted" : "_Decrypted";
+            var pathParts = path.Split('.');
+            pathParts[pathParts.Length - 2] += "_" + aesType.Name + encryptedSuffix + ".";
+            return string.Join("", pathParts);
+        }
+
+        private static void DoEncryptDecrypt(AESBASE AES, string filePath, string encryptedFilePath, string decryptedFilePath, string key)
+        {
+            var sw = new Stopwatch(); sw.Start();
+            var encrypted = AES.Encrypt(File.ReadAllBytes(filePath), key);
+            File.WriteAllBytes(encryptedFilePath, encrypted);
+            sw.Stop(); Console.WriteLine($"{AES.GetType().Name} encryption took: " + sw.ElapsedMilliseconds / 1000.0);
+
+            sw.Reset(); sw.Start();
+            var decrypted = AES.Decrypt(File.ReadAllBytes(encryptedFilePath), key);
+            File.WriteAllBytes(decryptedFilePath, decrypted);
+            sw.Stop(); Console.WriteLine($"{AES.GetType().Name} decryption took: " + sw.ElapsedMilliseconds / 1000.0);
         }
 
         private static string GetBytesString(byte[] bytes)
