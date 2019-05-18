@@ -7,6 +7,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Aes", "Aes\Aes.csproj", "{C
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AESHash", "AESHash\AESHash.csproj", "{56E99DD2-D9DF-4B61-ADDA-6584B77775C8}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Test", "Test\Test.csproj", "{4BD87749-05AE-4DE8-847F-0035E53C34FD}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -21,6 +23,10 @@ Global
 		{56E99DD2-D9DF-4B61-ADDA-6584B77775C8}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{56E99DD2-D9DF-4B61-ADDA-6584B77775C8}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{56E99DD2-D9DF-4B61-ADDA-6584B77775C8}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4BD87749-05AE-4DE8-847F-0035E53C34FD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4BD87749-05AE-4DE8-847F-0035E53C34FD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4BD87749-05AE-4DE8-847F-0035E53C34FD}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4BD87749-05AE-4DE8-847F-0035E53C34FD}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
