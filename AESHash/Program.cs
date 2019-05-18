@@ -84,45 +84,6 @@ namespace AESHash
         }
     }
 
-    public class AESHASH32 : AESHASH
-    {
-        public override byte[] GetHash(byte[] input)
-        {
-            var hash = base.GetHash(input);
-            var ret = new byte[4]
-            {
-                hash[0], hash[1], hash[2], hash[3]
-            };
-            return ret;
-        }
-
-        public override ulong GetLongHash(byte[] input)
-        {
-            var hash = base.GetHash(input);
-            return (ulong)BitConverter.ToUInt32(hash, 0);
-        }
-    }
-
-    public class AESHASH48 : AESHASH
-    {
-        public override byte[] GetHash(byte[] input)
-        {
-            var hash = base.GetHash(input);
-            var ret = new byte[6]
-            {
-                hash[0], hash[1], hash[2],
-                hash[3], hash[4], hash[5]
-            };
-            return ret;
-        }
-
-        public override ulong GetLongHash(byte[] input)
-        {
-            var hash = base.GetHash(input);
-            return (ulong)(BitConverter.ToUInt32(hash, 0) << 16 | hash[4] << 8 | hash[5]);
-        }
-    }
-
     public class AESHASH24 : AESHASH
     {
         public override byte[] GetHash(byte[] input)
