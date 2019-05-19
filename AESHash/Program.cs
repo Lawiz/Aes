@@ -153,6 +153,11 @@ namespace AESHash
             return rand.Next(minValue, maxValue);
         }
 
+        public static ulong GetBadRandomLong(ulong minValue, ulong maxValue)
+        {
+            return minValue + (ulong)(rand.NextDouble() * (maxValue - minValue));
+        }
+
         public static bool GetRandomBool()
         {
             return rand.Next(0, 2) == 1;
